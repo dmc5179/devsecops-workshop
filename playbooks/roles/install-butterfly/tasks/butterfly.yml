@@ -1,12 +1,39 @@
 ---
+- name: Create butterfly project for each user
+  k8s:
+    verify_ssl: "{{ verify_ssl }}"
+    name: "ocwt-user{{ item }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  loop: "{{ query('sequence', 'start=1 end={{ generic_count }}') }}"
+  loop_control:
+    pause: "{{ generic_pause }}"
 
-- name: Copy script for batch provisioning butterfly terminal
-  template:
-    src: "../files/oc-web-terminal.sh"
-    dest: "/home/{{ ansible_user }}/oc-web-terminal.sh"
-    mode: 0775
+- name: Deploy terminal application
+  k8s:
+    namespace: "{{ 'ocwt-user%x' | format(item) }}"
+    state: present
+    verify_ssl: "{{ verify_ssl }}"
+    definition: "{{ lookup('file', 'files/butterfly.yaml') }}"
+  loop: "{{ range(1, generic_count + 1, 1)|list }}"
+  loop_control:
+    pause: "{{ generic_pause }}"
 
-- name: Run butterfly installation script
-  shell: ./oc-web-terminal.sh |& tee install-butterfly.log
-  args:
-   chdir: "/home/{{ ansible_user }}"
+- name: Create a Route object from an inline definition
+  k8s:
+    state: present
+    verify_ssl: "{{ verify_ssl }}"
+    namespace: "{{ 'ocwt-user%x' | format(item) }}"
+    definition:
+      apiVersion: v1
+      kind: Route
+      metadata:
+        name: butterfly
+      spec:
+        to:
+          kind: Service
+          name: butterfly
+  loop: "{{ range(1, generic_count + 1, 1)|list }}"
+  loop_control:
+    pause: "{{ generic_pause }}"
